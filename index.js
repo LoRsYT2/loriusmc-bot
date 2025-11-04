@@ -2,10 +2,9 @@ const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, Permission
 const config = require('./config.json');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages]
 });
 
-// دالة تحويل المدة إلى مللي ثانية
 function parseDuration(durationStr) {
   const regex = /^(\d+)(s|m|h|d|w|mo|y)$/i;
   const match = durationStr.match(regex);
@@ -26,7 +25,6 @@ function parseDuration(durationStr) {
   }
 }
 
-// تعريف الأوامر
 const commands = [
   new SlashCommandBuilder()
     .setName('roleadd')
@@ -86,7 +84,6 @@ const commands = [
     .toJSON()
 ];
 
-// تسجيل الأوامر عند تشغيل البوت
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
@@ -102,7 +99,11 @@ client.once('ready', async () => {
   }
 });
 
-// التعامل مع الأوامر
+async function sendTempMessage(channel, content) {
+  const msg = await channel.send(content);
+  setTimeout(() => msg.delete().catch(() => {}), 3000);
+}
+
 client.on('interactionCreate', async i => {
   if (!i.isChatInputCommand()) return;
 
@@ -112,20 +113,18 @@ client.on('interactionCreate', async i => {
   if (['tempmute','tempban','tempwarn'].includes(i.commandName)) {
     const durationStr = i.options.getString('duration');
     durationMs = parseDuration(durationStr);
-    if (!durationMs) return i.reply({ content: '❌ صيغة المدة غير صحيحة. مثال: 5m, 2h, 1d, 1w, 1mo, 1y', ephemeral: true });
+    if (!durationMs) return sendTempMessage(i.channel, '❌ صيغة المدة غير صحيحة. مثال: 5m, 2h, 1d, 1w, 1mo, 1y');
   }
 
-  // صلاحيات الرتب
   if (['roleadd','roleremove'].includes(i.commandName)) {
     if (!i.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-      return i.reply({ content: '❌ ما عندك صلاحية إدارة الرتب.', ephemeral: true });
+      return sendTempMessage(i.channel, '❌ ما عندك صلاحية إدارة الرتب.');
     }
   }
 
-  // صلاحيات أوامر مؤقتة
   if (['tempmute','tempkick','tempwarn','tempban','tempunmute','tempunban'].includes(i.commandName)) {
     if (!i.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-      return i.reply({ content: '❌ ما عندك صلاحية للتعامل مع هذا الشخص.', ephemeral: true });
+      return sendTempMessage(i.channel, '❌ ما عندك صلاحية للتعامل مع هذا الشخص.');
     }
   }
 
@@ -133,34 +132,42 @@ client.on('interactionCreate', async i => {
     switch(i.commandName) {
       case 'roleadd':
         await member.roles.add(i.options.getRole('role'));
-        return i.reply(`✅ تمت إضافة الرتبة لـ ${member}`);
+        await sendTempMessage(i.channel, `✅ تمت إضافة الرتبة لـ ${member}`);
+        break;
       case 'roleremove':
         await member.roles.remove(i.options.getRole('role'));
-        return i.reply(`✅ تمت إزالة الرتبة من ${member}`);
+        await sendTempMessage(i.channel, `✅ تمت إزالة الرتبة من ${member}`);
+        break;
       case 'tempmute':
         await member.timeout(durationMs, reason);
-        return i.reply(`✅ تم كتم ${member} لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+        await sendTempMessage(i.channel, `✅ تم كتم ${member} لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+        break;
       case 'tempkick':
         await member.kick(reason);
-        return i.reply(`✅ تم طرد ${member}. السبب: ${reason}`);
+        await sendTempMessage(i.channel, `✅ تم طرد ${member}. السبب: ${reason}`);
+        break;
       case 'tempwarn':
-        return i.reply(`⚠️ تم تحذير ${member} لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+        await sendTempMessage(i.channel, `⚠️ تم تحذير ${member} لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+        break;
       case 'tempban':
         await member.ban({ reason });
         setTimeout(async () => {
           await i.guild.members.unban(member.id).catch(() => {});
         }, durationMs);
-        return i.reply(`✅ تم حظر ${member} مؤقتاً لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+        await sendTempMessage(i.channel, `✅ تم حظر ${member} مؤقتاً لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+        break;
       case 'tempunmute':
         await member.timeout(null).catch(() => {});
-        return i.reply(`✅ تم رفع الميوت عن ${member}`);
+        await sendTempMessage(i.channel, `✅ تم رفع الميوت عن ${member}`);
+        break;
       case 'tempunban':
         await i.guild.members.unban(member.id).catch(() => {});
-        return i.reply(`✅ تم رفع البان عن ${member}`);
+        await sendTempMessage(i.channel, `✅ تم رفع البان عن ${member}`);
+        break;
     }
   } catch(err) {
     console.log(err);
-    return i.reply({ content: '❌ حدث خطأ أثناء تنفيذ الأمر.', ephemeral: true });
+    await sendTempMessage(i.channel, '❌ حدث خطأ أثناء تنفيذ الأمر.');
   }
 });
 
