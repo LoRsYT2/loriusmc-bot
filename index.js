@@ -28,7 +28,6 @@ function parseDuration(durationStr) {
 
 // تعريف الأوامر
 const commands = [
-  // أوامر الرتب
   new SlashCommandBuilder()
     .setName('roleadd')
     .setDescription('يعطي رتبة لشخص')
@@ -43,7 +42,6 @@ const commands = [
     .addRoleOption(o => o.setName('role').setDescription('الرتبة').setRequired(true))
     .toJSON(),
 
-  // أوامر مؤقتة
   new SlashCommandBuilder()
     .setName('tempmute')
     .setDescription('كتم شخص مؤقت')
@@ -54,10 +52,9 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('tempkick')
-    .setDescription('طرد شخص مؤقت')
+    .setDescription('طرد شخص بدون مدة')
     .addUserOption(o => o.setName('member').setDescription('الشخص').setRequired(true))
     .addStringOption(o => o.setName('reason').setDescription('سبب الطرد').setRequired(true))
-    .addStringOption(o => o.setName('duration').setDescription('مدة الطرد (مثال: 1d, 3h)').setRequired(true))
     .toJSON(),
 
   new SlashCommandBuilder()
@@ -74,6 +71,18 @@ const commands = [
     .addUserOption(o => o.setName('member').setDescription('الشخص').setRequired(true))
     .addStringOption(o => o.setName('reason').setDescription('سبب الحظر').setRequired(true))
     .addStringOption(o => o.setName('duration').setDescription('مدة الحظر (مثال: 1d, 1w)').setRequired(true))
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('tempunmute')
+    .setDescription('رفع الميوت عن شخص')
+    .addUserOption(o => o.setName('member').setDescription('الشخص').setRequired(true))
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('tempunban')
+    .setDescription('رفع البان عن شخص')
+    .addUserOption(o => o.setName('member').setDescription('الشخص').setRequired(true))
     .toJSON()
 ];
 
@@ -99,8 +108,12 @@ client.on('interactionCreate', async i => {
 
   const member = i.options.getMember('member');
   const reason = i.options.getString('reason');
-  const durationStr = i.options.getString('duration'); // الآن duration كـ String
-  const durationMs = parseDuration(durationStr);
+  let durationMs;
+  if (['tempmute','tempban','tempwarn'].includes(i.commandName)) {
+    const durationStr = i.options.getString('duration');
+    durationMs = parseDuration(durationStr);
+    if (!durationMs) return i.reply({ content: '❌ صيغة المدة غير صحيحة. مثال: 5m, 2h, 1d, 1w, 1mo, 1y', ephemeral: true });
+  }
 
   // صلاحيات الرتب
   if (['roleadd','roleremove'].includes(i.commandName)) {
@@ -110,12 +123,9 @@ client.on('interactionCreate', async i => {
   }
 
   // صلاحيات أوامر مؤقتة
-  if (['tempmute','tempkick','tempwarn','tempban'].includes(i.commandName)) {
+  if (['tempmute','tempkick','tempwarn','tempban','tempunmute','tempunban'].includes(i.commandName)) {
     if (!i.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
       return i.reply({ content: '❌ ما عندك صلاحية للتعامل مع هذا الشخص.', ephemeral: true });
-    }
-    if (!durationMs) {
-      return i.reply({ content: '❌ صيغة المدة غير صحيحة. مثال: 5m, 2h, 1d, 1w, 1mo, 1y', ephemeral: true });
     }
   }
 
@@ -129,19 +139,24 @@ client.on('interactionCreate', async i => {
         return i.reply(`✅ تمت إزالة الرتبة من ${member}`);
       case 'tempmute':
         await member.timeout(durationMs, reason);
-        return i.reply(`✅ تم كتم ${member} لمدة ${durationStr}. السبب: ${reason}`);
+        return i.reply(`✅ تم كتم ${member} لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
       case 'tempkick':
         await member.kick(reason);
-        // الطرد المؤقت يحتاج إعادة الدعوة يدويًا، لا يوجد استرجاع تلقائي
-        return i.reply(`✅ تم طرد ${member} مؤقتاً لمدة ${durationStr}. السبب: ${reason}`);
+        return i.reply(`✅ تم طرد ${member}. السبب: ${reason}`);
       case 'tempwarn':
-        return i.reply(`⚠️ تم تحذير ${member} لمدة ${durationStr}. السبب: ${reason}`);
+        return i.reply(`⚠️ تم تحذير ${member} لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
       case 'tempban':
         await member.ban({ reason });
         setTimeout(async () => {
           await i.guild.members.unban(member.id).catch(() => {});
         }, durationMs);
-        return i.reply(`✅ تم حظر ${member} مؤقتاً لمدة ${durationStr}. السبب: ${reason}`);
+        return i.reply(`✅ تم حظر ${member} مؤقتاً لمدة ${i.options.getString('duration')}. السبب: ${reason}`);
+      case 'tempunmute':
+        await member.timeout(null).catch(() => {});
+        return i.reply(`✅ تم رفع الميوت عن ${member}`);
+      case 'tempunban':
+        await i.guild.members.unban(member.id).catch(() => {});
+        return i.reply(`✅ تم رفع البان عن ${member}`);
     }
   } catch(err) {
     console.log(err);
