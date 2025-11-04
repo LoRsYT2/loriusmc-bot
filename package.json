@@ -4,7 +4,7 @@
   "description": "LoriusMC Discord Ticket Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js & node server.js"
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "LoriusMC",
