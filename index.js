@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, PermissionsBitField } = require('discord.js');
-const config = require('./config.json');
+const config = require('./config.json'); // لا يحتوي على التوكن
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
@@ -25,7 +25,7 @@ const commands = [
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
-  const rest = new REST({ version: '10' }).setToken(config.token);
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN); // <-- قراءة التوكن من متغير البيئة
   try {
     await rest.put(
       Routes.applicationGuildCommands(config.clientId, config.guildId),
@@ -40,7 +40,6 @@ client.once('ready', async () => {
 client.on('interactionCreate', async i => {
   if (!i.isChatInputCommand()) return;
 
-  // صلاحية إدارة الرتب
   if (!i.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
     return i.reply({ content: '❌ ما عندك صلاحية إدارة الرتب.', ephemeral: true });
   }
@@ -52,7 +51,6 @@ client.on('interactionCreate', async i => {
     return i.reply({ content: 'تأكد من المنشنات.', ephemeral: true });
   }
 
-  // تحقق ترتيب الرتب
   if (i.guild.members.me.roles.highest.position <= role.position) {
     return i.reply({ content: '❌ ما أقدر أتعامل مع هالرتبة لأنها أعلى من دوري.', ephemeral: true });
   }
@@ -71,4 +69,4 @@ client.on('interactionCreate', async i => {
   }
 });
 
-client.login(config.token);
+client.login(process.env.TOKEN); // <-- نفس الطريقة هنا
